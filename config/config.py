@@ -16,7 +16,9 @@ import pandas as pd
 
 # data
 #TRAINING_DATA_FILE = "data/ETF_SPY_2009_2020.csv"
-TRAINING_DATA_FILE = "data/dow_30_2009_2020.csv"
+DOW30_DATA_FILE = "data/dow_30_2009_2020.csv"
+AXP_DATA_FILE = "data/axp_2009_2020.csv"
+
 
 
 TRAINED_MODEL_DIR = "trained_models"

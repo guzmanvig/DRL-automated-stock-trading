@@ -90,10 +90,10 @@ def add_technical_indicator(df):
 
 
 
-def preprocess_data():
+def preprocess_data(data_file_name):
     """data preprocessing pipeline"""
 
-    df = load_dataset(file_name=config.TRAINING_DATA_FILE)
+    df = load_dataset(file_name=data_file_name)
     # get data after 2009
     df = df[df.datadate>=20090000]
     # calcualte adjusted price
