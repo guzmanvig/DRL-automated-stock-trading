@@ -1,4 +1,6 @@
 # common library
+import math
+
 import pandas as pd
 import numpy as np
 import time
@@ -75,6 +77,8 @@ def DRL_prediction(df,
                    unique_trade_date,
                    rebalance_window,
                    turbulence_threshold,
+                   use_turbulence,
+                   stock_dimension,
                    initial):
     ### make a prediction based on trained model### 
 
@@ -82,10 +86,12 @@ def DRL_prediction(df,
     trade_data = data_split(df, start=unique_trade_date[iter_num - rebalance_window], end=unique_trade_date[iter_num])
     env_trade = DummyVecEnv([lambda: StockEnvTrade(trade_data,
                                                    turbulence_threshold=turbulence_threshold,
+                                                   use_turbulence=use_turbulence,
                                                    initial=initial,
                                                    previous_state=last_state,
                                                    model_name=name,
-                                                   iteration=iter_num)])
+                                                   iteration=iter_num,
+                                                   stock_dimension=stock_dimension)])
     obs_trade = env_trade.reset()
 
     for i in range(len(trade_data.index.unique())):
@@ -117,7 +123,7 @@ def get_validation_sharpe(iteration):
     return sharpe
 
 
-def run_ensemble_strategy(df, unique_trade_date, rebalance_window, validation_window) -> None:
+def run_ensemble_strategy(df, unique_trade_date, rebalance_window, validation_window, use_turbulence, stock_dimension) -> None:
     """Ensemble Strategy that combines PPO, A2C and DDPG"""
     print("============Start Ensemble Strategy============")
     # for ensemble model, it's necessary to feed the last state
@@ -132,9 +138,10 @@ def run_ensemble_strategy(df, unique_trade_date, rebalance_window, validation_wi
 
     # based on the analysis of the in-sample data
     #turbulence_threshold = 140
-    insample_turbulence = df[(df.datadate<20151000) & (df.datadate>=20090000)]
-    insample_turbulence = insample_turbulence.drop_duplicates(subset=['datadate'])
-    insample_turbulence_threshold = np.quantile(insample_turbulence.turbulence.values, .90)
+    if use_turbulence:
+        insample_turbulence = df[(df.datadate<20151000) & (df.datadate>=20090000)]
+        insample_turbulence = insample_turbulence.drop_duplicates(subset=['datadate'])
+        insample_turbulence_threshold = np.quantile(insample_turbulence.turbulence.values, .90)
 
     start = time.time()
     for i in range(rebalance_window + validation_window, len(unique_trade_date), rebalance_window):
@@ -147,35 +154,41 @@ def run_ensemble_strategy(df, unique_trade_date, rebalance_window, validation_wi
             # previous state
             initial = False
 
-        # Tuning trubulence index based on historical data
-        # Turbulence lookback window is one quarter
-        historical_turbulence = df[(df.datadate<unique_trade_date[i - rebalance_window - validation_window]) & (df.datadate>=(unique_trade_date[i - rebalance_window - validation_window-63]))]
-        historical_turbulence = historical_turbulence.drop_duplicates(subset=['datadate'])
-        historical_turbulence_mean = np.mean(historical_turbulence.turbulence.values)   
+        if use_turbulence:
+            # Tuning trubulence index based on historical data
+            # Turbulence lookback window is one quarter
+            historical_turbulence = df[(df.datadate<unique_trade_date[i - rebalance_window - validation_window]) & (df.datadate>=(unique_trade_date[i - rebalance_window - validation_window-63]))]
+            historical_turbulence = historical_turbulence.drop_duplicates(subset=['datadate'])
+            historical_turbulence_mean = np.mean(historical_turbulence.turbulence.values)
 
-        if historical_turbulence_mean > insample_turbulence_threshold:
-            # if the mean of the historical data is greater than the 90% quantile of insample turbulence data
-            # then we assume that the current market is volatile, 
-            # therefore we set the 90% quantile of insample turbulence data as the turbulence threshold 
-            # meaning the current turbulence can't exceed the 90% quantile of insample turbulence data
-            turbulence_threshold = insample_turbulence_threshold
+            if historical_turbulence_mean > insample_turbulence_threshold:
+                # if the mean of the historical data is greater than the 90% quantile of insample turbulence data
+                # then we assume that the current market is volatile,
+                # therefore we set the 90% quantile of insample turbulence data as the turbulence threshold
+                # meaning the current turbulence can't exceed the 90% quantile of insample turbulence data
+                turbulence_threshold = insample_turbulence_threshold
+            else:
+                # if the mean of the historical data is less than the 90% quantile of insample turbulence data
+                # then we tune up the turbulence_threshold, meaning we lower the risk
+                turbulence_threshold = np.quantile(insample_turbulence.turbulence.values, 1)
+            print("turbulence_threshold: ", turbulence_threshold)
         else:
-            # if the mean of the historical data is less than the 90% quantile of insample turbulence data
-            # then we tune up the turbulence_threshold, meaning we lower the risk 
-            turbulence_threshold = np.quantile(insample_turbulence.turbulence.values, 1)
-        print("turbulence_threshold: ", turbulence_threshold)
+            # this value doesn't matter, it will not be used
+            turbulence_threshold = 0
 
         ############## Environment Setup starts ##############
         ## training env
         train = data_split(df, start=20090000, end=unique_trade_date[i - rebalance_window - validation_window])
-        env_train = DummyVecEnv([lambda: StockEnvTrain(train)])
+        env_train = DummyVecEnv([lambda: StockEnvTrain(train, stock_dimension)])
 
         ## validation env
         validation = data_split(df, start=unique_trade_date[i - rebalance_window - validation_window],
                                 end=unique_trade_date[i - rebalance_window])
         env_val = DummyVecEnv([lambda: StockEnvValidation(validation,
                                                           turbulence_threshold=turbulence_threshold,
-                                                          iteration=i)])
+                                                          iteration=i,
+                                                          use_turbulence=use_turbulence,
+                                                          stock_dimension=stock_dimension)])
         obs_val = env_val.reset()
         ############## Environment Setup ends ##############
 
@@ -232,7 +245,9 @@ def run_ensemble_strategy(df, unique_trade_date, rebalance_window, validation_wi
                                              unique_trade_date=unique_trade_date,
                                              rebalance_window=rebalance_window,
                                              turbulence_threshold=turbulence_threshold,
-                                             initial=initial)
+                                             use_turbulence=use_turbulence,
+                                             initial=initial,
+                                             stock_dimension=stock_dimension)
         # print("============Trading Done============")
         ############## Trading ends ##############    
 
