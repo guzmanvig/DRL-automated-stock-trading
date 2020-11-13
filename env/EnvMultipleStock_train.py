@@ -18,12 +18,14 @@ INITIAL_ACCOUNT_BALANCE=1000000
 # transaction fee: 1/1000 reasonable percentage
 TRANSACTION_FEE_PERCENT = 0.001
 REWARD_SCALING = 1e-4
+OLD_PRICES_DIM = 80 # If changing, change also in models
+INITIAL_DAY = OLD_PRICES_DIM
 
 class StockEnvTrain(gym.Env):
     """A stock trading environment for OpenAI gym"""
     metadata = {'render.modes': ['human']}
 
-    def __init__(self, df, stock_dimension, day = 0):
+    def __init__(self, df, stock_dimension, day = INITIAL_DAY):
         #super(StockEnv, self).__init__()
         #money = 10 , scope = 1
         self.day = day
@@ -34,13 +36,14 @@ class StockEnvTrain(gym.Env):
         self.action_space = spaces.Box(low = -1, high = 1,shape = (self.stock_dimension,))
         # Shape = 181: [Current Balance]+[prices 1-30]+[owned shares 1-30] 
         # +[macd 1-30]+ [rsi 1-30] + [cci 1-30] + [adx 1-30]
-        self.observation_space = spaces.Box(low=0, high=np.inf, shape = (self.stock_dimension * 6 + 1,))
+        self.observation_space = spaces.Box(low=0, high=np.inf, shape = (self.stock_dimension * 6 + 1 + OLD_PRICES_DIM,))
         # load data from a pandas dataframe
         self.data = self.df.loc[self.day,:]
         self.terminal = False             
         # initalize state
         self.state = ([INITIAL_ACCOUNT_BALANCE]) + \
                      ([self.data.adjcp] if self.stock_dimension == 1 else self.data.adjcp.values.tolist()) + \
+                     (self.df.adjcp[self.day - INITIAL_DAY: self.day].tolist()[::-1]) + \
                      ([0]*self.stock_dimension) + \
                      ([self.data.macd] if self.stock_dimension == 1 else self.data.macd.values.tolist()) + \
                      ([self.data.rsi] if self.stock_dimension == 1 else self.data.rsi.values.tolist()) + \
@@ -59,15 +62,15 @@ class StockEnvTrain(gym.Env):
 
     def _sell_stock(self, index, action):
         # perform sell action based on the sign of the action
-        if self.state[index+self.stock_dimension+1] > 0:
+        if self.state[index+self.stock_dimension+1+OLD_PRICES_DIM] > 0:
             #update balance
             self.state[0] += \
-            self.state[index+1]*min(abs(action),self.state[index+self.stock_dimension+1]) * \
-             (1- TRANSACTION_FEE_PERCENT)
+                self.state[index+1] * min(abs(action), self.state[index + self.stock_dimension + 1 + OLD_PRICES_DIM]) * \
+                (1- TRANSACTION_FEE_PERCENT)
 
-            self.state[index+self.stock_dimension+1] -= min(abs(action), self.state[index+self.stock_dimension+1])
-            self.cost +=self.state[index+1]*min(abs(action),self.state[index+self.stock_dimension+1]) * \
-             TRANSACTION_FEE_PERCENT
+            self.state[index+self.stock_dimension+1 + OLD_PRICES_DIM] -= min(abs(action), self.state[index + self.stock_dimension + 1 + OLD_PRICES_DIM])
+            self.cost += self.state[index+1] * min(abs(action), self.state[index + self.stock_dimension + 1 + OLD_PRICES_DIM]) * \
+                         TRANSACTION_FEE_PERCENT
             self.trades+=1
         else:
             pass
@@ -82,7 +85,7 @@ class StockEnvTrain(gym.Env):
         self.state[0] -= self.state[index+1]*min(available_amount, action)* \
                           (1+ TRANSACTION_FEE_PERCENT)
 
-        self.state[index+self.stock_dimension+1] += min(available_amount, action)
+        self.state[index + self.stock_dimension + 1 + OLD_PRICES_DIM] += min(available_amount, action)
 
         self.cost+=self.state[index+1]*min(available_amount, action)* \
                           TRANSACTION_FEE_PERCENT
@@ -98,7 +101,7 @@ class StockEnvTrain(gym.Env):
             plt.savefig('results/account_value_train.png')
             plt.close()
             end_total_asset = self.state[0]+ \
-            sum(np.array(self.state[1:(self.stock_dimension+1)])*np.array(self.state[(self.stock_dimension+1):(self.stock_dimension*2+1)]))
+            sum(np.array(self.state[1:(self.stock_dimension + 1)]) * np.array(self.state[(self.stock_dimension + 1 + OLD_PRICES_DIM):(self.stock_dimension * 2 + 1 + OLD_PRICES_DIM)]))
             
             #print("end_total_asset:{}".format(end_total_asset))
             df_total_value = pd.DataFrame(self.asset_memory)
@@ -126,7 +129,7 @@ class StockEnvTrain(gym.Env):
             #actions = (actions.astype(int))
             
             begin_total_asset = self.state[0]+ \
-            sum(np.array(self.state[1:(self.stock_dimension+1)])*np.array(self.state[(self.stock_dimension+1):(self.stock_dimension*2+1)]))
+            sum(np.array(self.state[1:(self.stock_dimension+1)])*np.array(self.state[(self.stock_dimension+1+OLD_PRICES_DIM):(self.stock_dimension*2+1+OLD_PRICES_DIM)]))
             #print("begin_total_asset:{}".format(begin_total_asset))
             
             argsort_actions = np.argsort(actions)
@@ -147,15 +150,16 @@ class StockEnvTrain(gym.Env):
             #load next state
             # print("stock_shares:{}".format(self.state[29:]))
             self.state = ([self.state[0]]) + \
-                      ([self.data.adjcp] if self.stock_dimension == 1 else self.data.adjcp.values.tolist()) + \
-                      (list(self.state[(self.stock_dimension+1):(self.stock_dimension*2+1)])) + \
-                      ([self.data.macd] if self.stock_dimension == 1 else self.data.macd.values.tolist()) + \
-                      ([self.data.rsi] if self.stock_dimension == 1 else self.data.rsi.values.tolist()) + \
-                      ([self.data.cci] if self.stock_dimension == 1 else self.data.cci.values.tolist()) + \
-                      ([self.data.adx] if self.stock_dimension == 1 else self.data.adx.values.tolist())
+                         ([self.data.adjcp] if self.stock_dimension == 1 else self.data.adjcp.values.tolist()) + \
+                         (self.df.adjcp[self.day - INITIAL_DAY: self.day].tolist()[::-1]) + \
+                         (list(self.state[(self.stock_dimension+1 + OLD_PRICES_DIM):(self.stock_dimension*2+1 + OLD_PRICES_DIM)])) + \
+                         ([self.data.macd] if self.stock_dimension == 1 else self.data.macd.values.tolist()) + \
+                         ([self.data.rsi] if self.stock_dimension == 1 else self.data.rsi.values.tolist()) + \
+                         ([self.data.cci] if self.stock_dimension == 1 else self.data.cci.values.tolist()) + \
+                         ([self.data.adx] if self.stock_dimension == 1 else self.data.adx.values.tolist())
 
             end_total_asset = self.state[0]+ \
-            sum(np.array(self.state[1:(self.stock_dimension+1)])*np.array(self.state[(self.stock_dimension+1):(self.stock_dimension*2+1)]))
+            sum(np.array(self.state[1:(self.stock_dimension + 1)]) * np.array(self.state[(self.stock_dimension + 1 + OLD_PRICES_DIM):(self.stock_dimension * 2 + 1 + OLD_PRICES_DIM)]))
             self.asset_memory.append(end_total_asset)
             #print("end_total_asset:{}".format(end_total_asset))
             
@@ -171,7 +175,7 @@ class StockEnvTrain(gym.Env):
 
     def reset(self):
         self.asset_memory = [INITIAL_ACCOUNT_BALANCE]
-        self.day = 0
+        self.day = INITIAL_DAY
         self.data = self.df.loc[self.day,:]
         self.cost = 0
         self.trades = 0
@@ -180,6 +184,7 @@ class StockEnvTrain(gym.Env):
         #initiate state
         self.state = ([INITIAL_ACCOUNT_BALANCE]) + \
                      ([self.data.adjcp] if self.stock_dimension == 1 else self.data.adjcp.values.tolist()) + \
+                     (self.df.adjcp[self.day - INITIAL_DAY: self.day].tolist()[::-1]) + \
                      ([0]*self.stock_dimension) + \
                      ([self.data.macd] if self.stock_dimension == 1 else self.data.macd.values.tolist()) + \
                      ([self.data.rsi] if self.stock_dimension == 1 else self.data.rsi.values.tolist()) + \

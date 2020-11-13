@@ -21,12 +21,14 @@ TRANSACTION_FEE_PERCENT = 0.001
 # turbulence index: 90-150 reasonable threshold
 #TURBULENCE_THRESHOLD = 140
 REWARD_SCALING = 1e-4
+OLD_PRICES_DIM = 80 # If changing, change also in models
+INITIAL_DAY = OLD_PRICES_DIM
 
 class StockEnvValidation(gym.Env):
     """A stock trading environment for OpenAI gym"""
     metadata = {'render.modes': ['human']}
 
-    def __init__(self, df, stock_dimension, day = 0, turbulence_threshold=140, iteration='', use_turbulence=True):
+    def __init__(self, df, stock_dimension, day = INITIAL_DAY, turbulence_threshold=140, iteration='', use_turbulence=True):
         #super(StockEnv, self).__init__()
         #money = 10 , scope = 1
         self.day = day
@@ -37,7 +39,7 @@ class StockEnvValidation(gym.Env):
         self.action_space = spaces.Box(low = -1, high = 1,shape = (self.stock_dimension,))
         # Shape = 181: [Current Balance]+[prices 1-30]+[owned shares 1-30] 
         # +[macd 1-30]+ [rsi 1-30] + [cci 1-30] + [adx 1-30]
-        self.observation_space = spaces.Box(low=0, high=np.inf, shape = (self.stock_dimension  * 6 + 1,))
+        self.observation_space = spaces.Box(low=0, high=np.inf, shape = (self.stock_dimension  * 6 + 1 + OLD_PRICES_DIM,))
         # load data from a pandas dataframe
         self.data = self.df.loc[self.day,:]
         self.terminal = False     
@@ -46,6 +48,7 @@ class StockEnvValidation(gym.Env):
         # initalize state
         self.state = ([INITIAL_ACCOUNT_BALANCE]) + \
                      ([self.data.adjcp] if self.stock_dimension == 1 else self.data.adjcp.values.tolist()) + \
+                     (self.df.adjcp[self.day - INITIAL_DAY: self.day].tolist()[::-1]) + \
                      ([0]*self.stock_dimension) + \
                      ([self.data.macd] if self.stock_dimension == 1 else self.data.macd.values.tolist()) + \
                      ([self.data.rsi] if self.stock_dimension == 1 else self.data.rsi.values.tolist()) + \
@@ -68,26 +71,26 @@ class StockEnvValidation(gym.Env):
     def _sell_stock(self, index, action):
         # perform sell action based on the sign of the action
         if not self.use_turbulence or self.turbulence<self.turbulence_threshold:
-            if self.state[index+self.stock_dimension+1] > 0:
+            if self.state[index+self.stock_dimension+1 + OLD_PRICES_DIM] > 0:
                 #update balance
                 self.state[0] += \
-                self.state[index+1]*min(abs(action),self.state[index+self.stock_dimension+1]) * \
+                self.state[index+1]*min(abs(action),self.state[index+self.stock_dimension+1 + OLD_PRICES_DIM]) * \
                  (1- TRANSACTION_FEE_PERCENT)
                 
-                self.state[index+self.stock_dimension+1] -= min(abs(action), self.state[index+self.stock_dimension+1])
-                self.cost +=self.state[index+1]*min(abs(action),self.state[index+self.stock_dimension+1]) * \
+                self.state[index+self.stock_dimension+1 + OLD_PRICES_DIM] -= min(abs(action), self.state[index+self.stock_dimension+1+OLD_PRICES_DIM])
+                self.cost +=self.state[index+1]*min(abs(action),self.state[index+self.stock_dimension+1 + OLD_PRICES_DIM]) * \
                  TRANSACTION_FEE_PERCENT
                 self.trades+=1
             else:
                 pass
         else:
             # if turbulence goes over threshold, just clear out all positions 
-            if self.state[index+self.stock_dimension+1] > 0:
+            if self.state[index+self.stock_dimension+1+OLD_PRICES_DIM] > 0:
                 #update balance
-                self.state[0] += self.state[index+1]*self.state[index+self.stock_dimension+1]* \
+                self.state[0] += self.state[index+1]*self.state[index+self.stock_dimension+1+OLD_PRICES_DIM]* \
                               (1- TRANSACTION_FEE_PERCENT)
-                self.state[index+self.stock_dimension+1] =0
-                self.cost += self.state[index+1]*self.state[index+self.stock_dimension+1]* \
+                self.state[index+self.stock_dimension+1+OLD_PRICES_DIM] =0
+                self.cost += self.state[index+1]*self.state[index+self.stock_dimension+1+OLD_PRICES_DIM]* \
                               TRANSACTION_FEE_PERCENT
                 self.trades+=1
             else:
@@ -103,7 +106,7 @@ class StockEnvValidation(gym.Env):
             self.state[0] -= self.state[index+1]*min(available_amount, action)* \
                               (1+ TRANSACTION_FEE_PERCENT)
 
-            self.state[index+self.stock_dimension+1] += min(available_amount, action)
+            self.state[index+self.stock_dimension+1+OLD_PRICES_DIM] += min(available_amount, action)
             
             self.cost+=self.state[index+1]*min(available_amount, action)* \
                               TRANSACTION_FEE_PERCENT
@@ -124,7 +127,7 @@ class StockEnvValidation(gym.Env):
             df_total_value = pd.DataFrame(self.asset_memory)
             df_total_value.to_csv('results/account_value_validation_{}.csv'.format(self.iteration))
             end_total_asset = self.state[0]+ \
-            sum(np.array(self.state[1:(self.stock_dimension+1)])*np.array(self.state[(self.stock_dimension+1):(self.stock_dimension*2+1)]))
+            sum(np.array(self.state[1:(self.stock_dimension+1)])*np.array(self.state[(self.stock_dimension+1+OLD_PRICES_DIM):(self.stock_dimension*2+1+OLD_PRICES_DIM)]))
             #print("previous_total_asset:{}".format(self.asset_memory[0]))           
 
             #print("end_total_asset:{}".format(end_total_asset))
@@ -155,7 +158,7 @@ class StockEnvValidation(gym.Env):
             if self.use_turbulence and self.turbulence>=self.turbulence_threshold:
                 actions=np.array([-HMAX_NORMALIZE]*self.stock_dimension)
             begin_total_asset = self.state[0]+ \
-            sum(np.array(self.state[1:(self.stock_dimension+1)])*np.array(self.state[(self.stock_dimension+1):(self.stock_dimension*2+1)]))
+            sum(np.array(self.state[1:(self.stock_dimension+1)])*np.array(self.state[(self.stock_dimension+1+OLD_PRICES_DIM):(self.stock_dimension*2+1+OLD_PRICES_DIM)]))
             #print("begin_total_asset:{}".format(begin_total_asset))
             
             argsort_actions = np.argsort(actions)
@@ -180,14 +183,15 @@ class StockEnvValidation(gym.Env):
             # print("stock_shares:{}".format(self.state[29:]))
             self.state = ([self.state[0]]) + \
                       ([self.data.adjcp] if self.stock_dimension == 1 else self.data.adjcp.values.tolist()) + \
-                      (list(self.state[(self.stock_dimension+1):(self.stock_dimension*2+1)])) + \
+                      (self.df.adjcp[self.day - INITIAL_DAY: self.day].tolist()[::-1]) + \
+                      (list(self.state[(self.stock_dimension+1+OLD_PRICES_DIM):(self.stock_dimension*2+1+OLD_PRICES_DIM)])) + \
                       ([self.data.macd] if self.stock_dimension == 1 else self.data.macd.values.tolist()) + \
                       ([self.data.rsi] if self.stock_dimension == 1 else self.data.rsi.values.tolist()) + \
                       ([self.data.cci] if self.stock_dimension == 1 else self.data.cci.values.tolist()) + \
                       ([self.data.adx] if self.stock_dimension == 1 else self.data.adx.values.tolist())
             
             end_total_asset = self.state[0]+ \
-            sum(np.array(self.state[1:(self.stock_dimension+1)])*np.array(self.state[(self.stock_dimension+1):(self.stock_dimension*2+1)]))
+            sum(np.array(self.state[1:(self.stock_dimension+1)])*np.array(self.state[(self.stock_dimension+1+OLD_PRICES_DIM):(self.stock_dimension*2+1+OLD_PRICES_DIM)]))
             self.asset_memory.append(end_total_asset)
             #print("end_total_asset:{}".format(end_total_asset))
             
@@ -201,7 +205,7 @@ class StockEnvValidation(gym.Env):
 
     def reset(self):  
         self.asset_memory = [INITIAL_ACCOUNT_BALANCE]
-        self.day = 0
+        self.day = INITIAL_DAY
         self.data = self.df.loc[self.day,:]
         self.turbulence = 0
         self.cost = 0
@@ -212,6 +216,7 @@ class StockEnvValidation(gym.Env):
         #initiate state
         self.state = ([INITIAL_ACCOUNT_BALANCE]) + \
                      ([self.data.adjcp] if self.stock_dimension == 1 else self.data.adjcp.values.tolist()) + \
+                     (self.df.adjcp[self.day - INITIAL_DAY: self.day].tolist()[::-1]) + \
                      ([0]*self.stock_dimension) + \
                      ([self.data.macd] if self.stock_dimension == 1 else self.data.macd.values.tolist()) + \
                      ([self.data.rsi] if self.stock_dimension == 1 else self.data.rsi.values.tolist()) + \

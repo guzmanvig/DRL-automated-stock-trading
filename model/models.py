@@ -24,6 +24,7 @@ from env.EnvMultipleStock_train import StockEnvTrain
 from env.EnvMultipleStock_validation import StockEnvValidation
 from env.EnvMultipleStock_trade import StockEnvTrade
 
+OLD_PRICES_DIM = 80 # Same as in each environment. If changing, change also in envs
 
 def train_A2C(env_train, model_name, timesteps=50000):
     """A2C model"""
@@ -83,8 +84,11 @@ def DRL_prediction(df,
     ### make a prediction based on trained model### 
 
     ## trading env
+    start_index_of_old_data = df.datadate[df.datadate >= unique_trade_date[iter_num - rebalance_window]].index[0] - OLD_PRICES_DIM
+    old_data = data_split(df, start=df.datadate[start_index_of_old_data],
+                          end=unique_trade_date[iter_num - rebalance_window])
     trade_data = data_split(df, start=unique_trade_date[iter_num - rebalance_window], end=unique_trade_date[iter_num])
-    env_trade = DummyVecEnv([lambda: StockEnvTrade(trade_data,
+    env_trade = DummyVecEnv([lambda: StockEnvTrade(pd.concat([old_data, trade_data], ignore_index=True),
                                                    turbulence_threshold=turbulence_threshold,
                                                    use_turbulence=use_turbulence,
                                                    initial=initial,
@@ -182,9 +186,12 @@ def run_ensemble_strategy(df, unique_trade_date, rebalance_window, validation_wi
         env_train = DummyVecEnv([lambda: StockEnvTrain(train, stock_dimension)])
 
         ## validation env
+        start_index_of_old_data = df.datadate[df.datadate >= unique_trade_date[i - rebalance_window - validation_window]].index[0] - OLD_PRICES_DIM
+        old_data = data_split(df, start=df.datadate[start_index_of_old_data],
+                                end=unique_trade_date[i - rebalance_window - validation_window])
         validation = data_split(df, start=unique_trade_date[i - rebalance_window - validation_window],
                                 end=unique_trade_date[i - rebalance_window])
-        env_val = DummyVecEnv([lambda: StockEnvValidation(validation,
+        env_val = DummyVecEnv([lambda: StockEnvValidation(pd.concat([old_data, validation], ignore_index=True),
                                                           turbulence_threshold=turbulence_threshold,
                                                           iteration=i,
                                                           use_turbulence=use_turbulence,
