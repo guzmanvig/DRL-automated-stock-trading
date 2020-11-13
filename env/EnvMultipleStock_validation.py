@@ -39,7 +39,7 @@ class StockEnvValidation(gym.Env):
         self.action_space = spaces.Box(low = -1, high = 1,shape = (self.stock_dimension,))
         # Shape = 181: [Current Balance]+[prices 1-30]+[owned shares 1-30] 
         # +[macd 1-30]+ [rsi 1-30] + [cci 1-30] + [adx 1-30]
-        self.observation_space = spaces.Box(low=0, high=np.inf, shape = (self.stock_dimension  * 6 + 1 + OLD_PRICES_DIM,))
+        self.observation_space = spaces.Box(low=0, high=np.inf, shape = (self.stock_dimension  * 2 + 1 + OLD_PRICES_DIM,))
         # load data from a pandas dataframe
         self.data = self.df.loc[self.day,:]
         self.terminal = False     
@@ -49,11 +49,11 @@ class StockEnvValidation(gym.Env):
         self.state = ([INITIAL_ACCOUNT_BALANCE]) + \
                      ([self.data.adjcp] if self.stock_dimension == 1 else self.data.adjcp.values.tolist()) + \
                      (self.df.adjcp[self.day - INITIAL_DAY: self.day].tolist()[::-1]) + \
-                     ([0]*self.stock_dimension) + \
-                     ([self.data.macd] if self.stock_dimension == 1 else self.data.macd.values.tolist()) + \
-                     ([self.data.rsi] if self.stock_dimension == 1 else self.data.rsi.values.tolist()) + \
-                     ([self.data.cci] if self.stock_dimension == 1 else self.data.cci.values.tolist()) + \
-                     ([self.data.adx] if self.stock_dimension == 1 else self.data.adx.values.tolist())
+                     ([0]*self.stock_dimension)# + \
+                     #([self.data.macd] if self.stock_dimension == 1 else self.data.macd.values.tolist()) + \
+                     #([self.data.rsi] if self.stock_dimension == 1 else self.data.rsi.values.tolist()) + \
+                     #([self.data.cci] if self.stock_dimension == 1 else self.data.cci.values.tolist()) + \
+                     #([self.data.adx] if self.stock_dimension == 1 else self.data.adx.values.tolist())
         # initialize reward
         self.reward = 0
         self.turbulence = 0
@@ -184,11 +184,11 @@ class StockEnvValidation(gym.Env):
             self.state = ([self.state[0]]) + \
                       ([self.data.adjcp] if self.stock_dimension == 1 else self.data.adjcp.values.tolist()) + \
                       (self.df.adjcp[self.day - INITIAL_DAY: self.day].tolist()[::-1]) + \
-                      (list(self.state[(self.stock_dimension+1+OLD_PRICES_DIM):(self.stock_dimension*2+1+OLD_PRICES_DIM)])) + \
-                      ([self.data.macd] if self.stock_dimension == 1 else self.data.macd.values.tolist()) + \
-                      ([self.data.rsi] if self.stock_dimension == 1 else self.data.rsi.values.tolist()) + \
-                      ([self.data.cci] if self.stock_dimension == 1 else self.data.cci.values.tolist()) + \
-                      ([self.data.adx] if self.stock_dimension == 1 else self.data.adx.values.tolist())
+                      (list(self.state[(self.stock_dimension+1+OLD_PRICES_DIM):(self.stock_dimension*2+1+OLD_PRICES_DIM)]))# + \
+                      #([self.data.macd] if self.stock_dimension == 1 else self.data.macd.values.tolist()) + \
+                      #([self.data.rsi] if self.stock_dimension == 1 else self.data.rsi.values.tolist()) + \
+                      #([self.data.cci] if self.stock_dimension == 1 else self.data.cci.values.tolist()) + \
+                      #([self.data.adx] if self.stock_dimension == 1 else self.data.adx.values.tolist())
             
             end_total_asset = self.state[0]+ \
             sum(np.array(self.state[1:(self.stock_dimension+1)])*np.array(self.state[(self.stock_dimension+1+OLD_PRICES_DIM):(self.stock_dimension*2+1+OLD_PRICES_DIM)]))
@@ -217,11 +217,11 @@ class StockEnvValidation(gym.Env):
         self.state = ([INITIAL_ACCOUNT_BALANCE]) + \
                      ([self.data.adjcp] if self.stock_dimension == 1 else self.data.adjcp.values.tolist()) + \
                      (self.df.adjcp[self.day - INITIAL_DAY: self.day].tolist()[::-1]) + \
-                     ([0]*self.stock_dimension) + \
-                     ([self.data.macd] if self.stock_dimension == 1 else self.data.macd.values.tolist()) + \
-                     ([self.data.rsi] if self.stock_dimension == 1 else self.data.rsi.values.tolist()) + \
-                     ([self.data.cci] if self.stock_dimension == 1 else self.data.cci.values.tolist()) + \
-                     ([self.data.adx] if self.stock_dimension == 1 else self.data.adx.values.tolist())
+                     ([0]*self.stock_dimension)# + \
+                     #([self.data.macd] if self.stock_dimension == 1 else self.data.macd.values.tolist()) + \
+                     #([self.data.rsi] if self.stock_dimension == 1 else self.data.rsi.values.tolist()) + \
+                     #([self.data.cci] if self.stock_dimension == 1 else self.data.cci.values.tolist()) + \
+                     #([self.data.adx] if self.stock_dimension == 1 else self.data.adx.values.tolist())
             
         return self.state
     
