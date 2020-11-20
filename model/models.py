@@ -118,12 +118,15 @@ def DRL_validation(model, test_data, test_env, test_obs) -> None:
 
 
 def get_validation_sharpe(iteration):
-    ###Calculate Sharpe ratio based on validation results###
+    # ## Calculate Sharpe ratio based on validation results###
     df_total_value = pd.read_csv('results/account_value_validation_{}.csv'.format(iteration), index_col=0)
     df_total_value.columns = ['account_value_train']
     df_total_value['daily_return'] = df_total_value.pct_change(1)
-    sharpe = (4 ** 0.5) * df_total_value['daily_return'].mean() / \
-             df_total_value['daily_return'].std()
+    if df_total_value['daily_return'].std() == 0:
+        sharpe = -math.inf
+    else:
+        sharpe = (4 ** 0.5) * df_total_value['daily_return'].mean() / \
+                 df_total_value['daily_return'].std()
     return sharpe
 
 
