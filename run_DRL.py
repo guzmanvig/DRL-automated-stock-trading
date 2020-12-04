@@ -1,6 +1,6 @@
 from model.models import *
 
-file_name = config.AXP_DATA_FILE
+file_name = config.AMZN_DATA_FILE
 use_turbulence = False
 stock_dimension = 1
 

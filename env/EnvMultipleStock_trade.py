@@ -11,7 +11,7 @@ import pickle
 
 # shares normalization factor
 # 100 shares per trade
-HMAX_NORMALIZE = 100
+HMAX_NORMALIZE = 10000
 # initial amount of money we have in our account
 INITIAL_ACCOUNT_BALANCE = 1000000
 # total number of stocks in our portfolio
@@ -197,8 +197,8 @@ class StockEnvTrade(gym.Env):
             # load next state
             # print("stock_shares:{}".format(self.state[29:]))
             self.state = ([self.state[0]]) + \
-                         ([self.data.adjcp] if self.stock_dimension == 1 else self.data.adjcp.values.tolist()) + \
-                         (self.df.adjcp[self.day - INITIAL_DAY: self.day].tolist()[::-1]) + \
+                         ([self.data.excaus] if self.stock_dimension == 1 else self.data.excaus.values.tolist()) + \
+                         (self.df.excaus[self.day - INITIAL_DAY: self.day].tolist()[::-1]) + \
                          (list(self.state[(self.stock_dimension + 1 + OLD_PRICES_DIM):(
                                  self.stock_dimension * 2 + 1 + OLD_PRICES_DIM)]))  # + \
             # ([self.data.macd] if self.stock_dimension == 1 else self.data.macd.values.tolist()) + \
