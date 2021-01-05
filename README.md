@@ -1,4 +1,6 @@
-# Deep Reinforcement Learning for Automated Stock Trading: An Ensemble Strategy
+## This is a modification of the original algorithm with the following description:
+
+## Deep Reinforcement Learning for Automated Stock Trading: An Ensemble Strategy
 This repository refers to the codes for [ICAIF 2020 paper](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3690996)
 
 
